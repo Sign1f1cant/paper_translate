@@ -1,0 +1,11 @@
+\chapter{相关工作}
+
+\section{AI 驱动的通用机器人}
+通用机器人~\cite{Nilsson1973, BillardscienceTrends, Kroemer2021ReviewRobotLearning, Ingrand2017ReviewDeliberation, Cui2021ScienceRobotic}的开发要求模型不仅能够处理多样化交互，还要在非结构化环境中保持鲁棒性。早期智能机器人~\cite{Murray1994mathematical, Mason2001Mechanics, Mason2018Toward, moudgal1994rule, zhu2021rule}通常依赖基于规则的方法，这类方法仅在受控环境中有效，并且面对新任务时需要大量重新编程。随着深度学习~\cite{Levine2018CNNHandEye, Pinto2016Supersizing, Finn2017MetaLearning, JamesBD18TaskEmbedded}和强化学习~\cite{tang2024deep, wang2024research, al2024reinforcement}的发展，这一范式逐步转向数据驱动流程，使机器人能够更好地适应变化，同时提升通用性并降低人工重配置成本。
+
+近期研究~\cite{Brohan2023rt1, MeesHB2022What, Pong2020Skew}进一步推进了大视觉语言模型（LVLMs）作为通用机器人关键使能技术的发展与应用潜力，并在多种场景中展示了良好的泛化能力~\cite{Brianna2023RT2, Jiang2022VIMA, Octo2024Octo, huang2023embodied, li2023vision, cui2024collaborative}。其中一个典型代表是 OpenVLA~\cite{kim24openvla}，它通过融合双视觉编码器与预训练大语言模型，实现了基于指令跟随的 observation-to-action 能力~\cite{liu2024improved, liu2024visual, karamcheti2024prismatic, chen2023pali, zhao2023svit, wang2024mmpt}。通过对齐视觉与文本语义，OpenVLA 能够进行复杂场景理解和端到端动作生成，在执行未见过的任务指令时展现出令人印象深刻的泛化能力。
+
+\section{机器人中的对抗攻击}\label{subsec:lr:ad_attack}
+对抗攻击是评估模型脆弱性的关键工具，尤其在机器人领域更是如此，因为机器人模型运行于动态且真实的环境中。传统基于梯度的像素级攻击~\cite{Goodfellow2015FGSM,Madry2018twords,Du2022Physical,Wang2019advPattern,Liu2019Perceptualpatch,Su2019OnePixel}利用模型梯度计算恶意扰动，在数字环境中可实现很高的攻击成功率。对于物理世界攻击，基于补丁的方法~\cite{brown2018adversarialpatch, Sharif2016advglass, Xu2020AdvTShirt, AthalyeEOT2018, wu2024adversarial}为真实应用提供了实用替代方案，因为它们引入的扰动能够在角度、光照等变化条件下保持有效，因此非常适用于机器人系统。因此，考虑到基于 VLA 的模型能够驱动机器人在真实场景中执行任务，本文采用基于补丁的攻击策略。
+
+VLA 模型~\cite{Octo2024Octo,Huang2023VoxPoser, chiang2024mobility}通过耦合视觉与语言模态实现感知与动作对齐。视觉输入具有连续且高维的特性~\cite{Szegedy2014Intriguing,Madry2018twords, QiHP0WM24Visual}，因此最容易成为对抗扰动的目标，因为攻击者可以以难以察觉的方式对视觉数据进行细微篡改~\cite{Carlini017Bypassing,AthalyeC018Obfuscated,Tramer22Detecting}。基于这一点，本文选择在视觉模态上实施攻击，以在多样环境中实现鲁棒操控。据我们所知，本研究是\textit{最早尝试之一}，正式为 VLA 模型定义对抗目标，并通过模型的几何约束（例如，视觉输入中的空间依赖）与架构细节（例如，跨模态信息整合）来定位其对抗鲁棒性缺口。

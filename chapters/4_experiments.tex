@@ -1,0 +1,244 @@
+\chapter{实验}
+
+\label{sec:exp}
+本节首先在 \S\ref{Attack_Pipeline} 中介绍我们的对抗框架与基线方法的实现细节。随后，在 \S\ref{sec:experiment_setup} 中说明实验设置，并在模拟与物理世界场景下报告定量和定性结果（\S\ref{subsec:main_results}）。之后，我们在 \S\ref{sec:diag} 中进行诊断实验，以分析关键组件的影响；在 \S\ref{sec:defense} 中评估方法面对不同防御机制时的鲁棒性；最后在 \S\ref{sec:sysdis} 中给出系统层面的综合讨论。
+
+\begin{algorithm}
+\caption{对抗补丁攻击。}
+\begin{algorithmic}[1]
+\STATE {\bfseries 输入：} $\mathcal{X}$：数据集；$\delta$：补丁；$\mathcal{L}_o$：攻击目标； \\ $\mathcal{F}$：VLA 模型；$\mathcal{T}(\cdot)$：变换；$\phi,\psi$：变换参数；T：攻击步数；$k$：内循环步数。
+\STATE {\bfseries 初始化：} $\delta \sim \mathcal{U}[0,1)$, $\mathcal{L}_o \in \{\mathcal{L}_{\text{UADA}}, \mathcal{L}_{\text{UPA}}, \mathcal{L}_{\text{TMA}}\} $
+\FOR{$i = 1, 2, \cdots, T$}
+        \FOR{$i = 1, 2, \cdots, k$} \label{alg:innerloop}
+            \STATE $sh_x,sh_y \sim \mathcal{U}(-\phi,\phi)$, $\theta \sim \mathcal{U}(-\psi,\psi)$  \\
+            \STATE $y_{\text{pred}} \leftarrow \mathcal{F}\big[\mathcal{T}((x+\delta),(sh_x,sh_y,\theta))\big]$ \\ \label{alg:eot}
+            \STATE $\delta \leftarrow \frac{\partial \mathcal{L}_o}{\partial \delta}$\COMMENT{$\rhd$ 更新 }\\
+            \ENDFOR
+\ENDFOR
+\end{algorithmic}
+\label{algorithm:1}
+\end{algorithm}
+\section{实现细节} \label{Attack_Pipeline}
+我们的对抗补丁攻击流程实现如算法~\ref{algorithm:1} 所示。为提高生成补丁的训练稳定性，我们引入了两项关键修改。 \\
+\textbf{内循环。} 参考先前工作~\cite{Madry2018twords}，我们在第 \ref{alg:innerloop} 行所示的每次迭代中加入 $k$ 个内循环优化步骤，以减少数据方差并确保更新更加一致。 \\
+\textbf{几何变换。} 为了提升攻击在真实场景中的鲁棒性，我们在第 \ref{alg:eot} 行采用随机几何变换 $\mathcal{T}\big[(\cdot),(sh_x,sh_y,\theta)\big]$，结合仿射变换与旋转变换~\cite{AthalyeEOT2018}，定义为：
+\begin{equation}
+    \mathcal{T}\big[(\cdot),(sh_x,sh_y,\theta)\big]=
+    \begin{bmatrix}
+    1 & sh_y \\
+    sh_x  & 1
+    \end{bmatrix}
+    \cdot
+    \begin{bmatrix}
+    \cos \theta & -\sin \theta \\
+    \sin \theta & \cos \theta
+    \end{bmatrix},
+    \label{eq:trans}
+\end{equation}
+其中 $sh_x, sh_y \sim \mathcal{U}(-\phi, \phi)$ 为剪切因子，$\theta \sim \mathcal{U}(-\psi, \psi)$ 表示旋转角，它们均在内循环优化步 $k$ 中从均匀分布进行采样。
+
+\textbf{非目标操控攻击（UMA）基线。} 
+由于本文属于开创性研究，我们未能找到与本文攻击直接可比的基线。因此，我们将既有对抗学习工作~\cite{Florian2020untarget}改造为一类基线方法。该攻击原本用于误导分类器；我们将其整合进本文框架后，得到如下目标函数：
+\begin{equation}
+\mathcal{L_\text{UMA}}=-\mathbb{E}_{(x,y)\sim\mathcal{X}}[CE(\mathcal{F}(x + \delta)^I, y^I_{gt})].
+\end{equation}
+通过最小化负的交叉熵损失，该攻击会将预测动作推离真实动作。
+
+\textbf{随机噪声基线。} 我们还生成随机噪声补丁作为额外基线，用以表示一种不具有任何学习式对抗意图的非结构化干预。具体而言，噪声从高斯分布 $\mathcal{N}(0, 1)$ 中采样，并在与本文攻击方法相同的设置下进行评估。
+
+\begin{table}[t]
+\caption{\textbf{非目标攻击结果。} 我们在 LIBERO 仿真环境中报告 FR 和 NAD。$^*$ 表示与补丁生成模型和数据集一致的同域受害模型与数据集，$^\triangle$ 表示涉及不同受害模型和数据集的迁移攻击评估（见 \S\ref{sec:experiment_setup}）。每个任务套件中的 FR~($\uparrow$) 以 \textbf{最佳} 和 \underline{次优} 进行标注。}
+\begin{subtable}[t]{0.499\linewidth}
+     \label{tab:untargeted-sim}
+						\captionsetup{width=.99\linewidth}
+						\resizebox{\textwidth}{!}{
+							\setlength\tabcolsep{4pt}
+							\renewcommand\arraystretch{1.1}
+							\begin{tabular}{c|c|c|ccccc}
+% \toprule
+\toprule
+\rowcolor{mygray}
+                        &                  &                                              &   \multicolumn{5}{c}{受害模型}  \\
+\rowcolor{mygray}
+ 目标 & 动作   &NAD(\%)&  Spatial$^\triangle$ & Object$^\triangle$ & Goal$^\triangle$ & Long$^*$ & 平均    \\
+\midrule
+\midrule
+良性                       & \multirow{2}{*}{-}   & \multirow{2}{*}{-}    & 15.3$\pm$10.2\%               & 11.6$\pm$10.0\%               & 20.8$\pm$12.0\%               & 46.3$\pm$18.6\%     & \cellcolor{mygray}23.5\%  \\
+随机噪声                 &                      &                       & 28.8$\pm$24.2\%               & 14.8$\pm$7.9\%                & 21.0$\pm$15.5\%               & 48.4$\pm$14.8\%     & \cellcolor{mygray}28.3\%  \\
+\midrule
+\multirow{2}{*}{UMA}         & DoF$_1$                 & 14.1                  & 100$\pm$0.0\%               & 99.0$\pm$3.0\%               &100$\pm$0.0\%                & 100$\pm$0.0\%     & \cellcolor{mygray}99.8\% \\
+                             & ~~~~DoF$_{1\sim3}$      & 11.4                  & 100$\pm$0.0\%               & 98.8$\pm$2.6\%               & 99.0$\pm$2.4\%                & 100$\pm$0.0\%     & \cellcolor{mygray}99.5\% \\
+\cmidrule{1-8}
+\multirow{2}{*}{UADA}        & DoF$_1$                 & 21.0                  & 100$\pm$0.0\%               & 99.2$\pm$2.4\%               & 100$\pm$0.0\%                & 100$\pm$0.0\%     & \cellcolor{mygray}\underline{99.8\%} \\
+                             & ~~~~DoF$_{1\sim3}$      & 17.9                  & 100$\pm$0.0\%               & 100$\pm$0.0\%               & 100$\pm$0.0\%                & 100$\pm$0.0\%     & \cellcolor{mygray}\textbf{100\%}  \\
+\cmidrule{1-8}
+UPA                          & ~~~~DoF$_{1\sim3}$      & 14.5                  & 96.2$\pm$11.4\%               & 77.8$\pm$12.5\%               & 88.0$\pm$10.4\%                & 96.8$\pm$3.0\%     & \cellcolor{mygray}89.7\% \\
+\bottomrule
+\end{tabular}}
+						\setlength{\abovecaptionskip}{0.3cm}
+						\setlength{\belowcaptionskip}{-0.1cm}
+                        \renewcommand{\thesubtable}{a}
+                        \vspace{5pt}
+						\caption{\textbf{仿真设置}。在 OpenVLA-LIBERO-10 受害模型与 LIBERO-Long 数据集上生成对抗补丁，并在 LIBERO-X 上进行评估。}
+						\label{table:simulation-results}
+					\end{subtable}
+\hfill
+\begin{subtable}[t]{0.499\linewidth}
+     \label{tab:untargeted-physical}
+						\captionsetup{width=.99\linewidth}
+						\resizebox{\textwidth}{!}{
+							\setlength\tabcolsep{4pt}
+							\renewcommand\arraystretch{1.1}
+							\begin{tabular}{c|c|c|ccccc}
+% \toprule
+\toprule
+\rowcolor{mygray}
+                        &                  &                                              &   \multicolumn{5}{c}{受害模型}  \\
+\rowcolor{mygray}
+ 目标 & 动作   &NAD(\%)&  Spatial$^\triangle$ & Object$^\triangle$ & Goal$^\triangle$ & Long$^\triangle$ & 平均    \\
+\midrule
+\midrule
+良性                       & \multirow{2}{*}{-}   & \multirow{2}{*}{-}    & 15.3$\pm$10.2\%               & 11.6$\pm$10.0\%               & 20.8$\pm$12.0\%               & 46.3$\pm$18.6\%     & \cellcolor{mygray}23.5\%  \\
+随机噪声                 &                      &                       & 28.8$\pm$24.2\%               & 14.8$\pm$7.9\%                & 21.0$\pm$15.5\%               & 48.4$\pm$14.8\%     & \cellcolor{mygray}28.3\%  \\
+\midrule
+\multirow{2}{*}{UMA}         & DoF$_1$              & 26.7                  & 89.6$\pm$15.3\%               & 60.8$\pm$16.8\%               & 64.8$\pm$26.8\%               & 80.0$\pm$20.8\%     & \cellcolor{mygray}73.8\%  \\
+                             & ~~~~DoF$_{1\sim3}$      & 23.8                  & 96.6$\pm$6.2\%               & 56.4$\pm$20.4\%               & 80.0$\pm$20.5\%               & 82.0$\pm$17.9\%     & \cellcolor{mygray}78.8\%  \\
+\cmidrule{1-8}
+\multirow{2}{*}{UADA}        & DoF$_1$              & 32.6                  & 99.2$\pm$1.8\%               & 98.8$\pm$2.4\%               & 92.6$\pm$15.2\%               & 96.6$\pm$4.8\%     & \cellcolor{mygray}\underline{96.8\%}  \\
+                             & ~~~~DoF$_{1\sim3}$      & 27.7                  & 100$\pm$0.0\%               & 100$\pm$0.0\%               & 100$\pm$0.0\%               & 100$\pm$0.0\%     & \cellcolor{mygray}\textbf{100\%}  \\
+\cmidrule{1-8}
+UPA                          & ~~~~DoF$_{1\sim3}$      & 26.9                  & 95.6$\pm$9.5 \%               & 57.0$\pm$23.6\%               & 57.2$\pm$24.4\%               & 72.8$\pm$19.7\%     & \cellcolor{mygray}70.7\%  \\
+\bottomrule
+\end{tabular}}
+						\setlength{\abovecaptionskip}{0.3cm}
+						\setlength{\belowcaptionskip}{-0.1cm}
+                        \renewcommand{\thesubtable}{b}
+                        \vspace{5pt}
+						\caption{\textbf{物理设置}。在 OpenVLA-7b 受害模型与 BV2 数据集上生成对抗补丁，并在 LIBERO-X 上进行评估。}
+						\label{table:physical-results}
+					\end{subtable}
+\end{table}
+
+\section{实验设置}\label{sec:experiment_setup}
+\textbf{数据集。} 
+我们在 BridgeData V2~\cite{bridgev2} 与 LIBERO~\cite{LIBREO} 上，结合相应的 VLA 模型开展攻击。BridgeData V2~\cite{bridgev2} 是一个真实世界数据集，包含 $24$ 个多样环境和 $13$ 种不同技能，例如抓取、放置和物体重排，总计 $60,096$ 条轨迹。LIBERO~\cite{LIBREO} 是一个仿真数据集，旨在评估模型在四类不同任务上的表现（Spatial、Object、Goal、Long）。其中，LIBERO-Long 融合了多样对象、布局和长时程任务，因此对复杂多步规划更具挑战性，所以我们选择 LIBERO-Long 来执行 UADA、UPA 和 TMA。
+
+\textbf{受害 VLA 模型。}
+在本文中，我们选择了公开可用且当前最具影响力的 VLA 模型作为受害模型进行评估。具体而言，我们聚焦于 OpenVLA 模型的四个变体，它们分别在 LIBERO 数据集~\cite{LIBREO}中不同的任务套件上独立训练（即，Spatial、Object、Goal、Long）。
+为了评估方法有效性，我们在三种不同的生成设置下构造对抗补丁：\textbf{仿真设置}使用在模拟环境中基于 LIBERO Long 套件训练的 openvla-7B-libero-long 变体~\cite{kim24openvla}；\textbf{物理设置}使用在 BridgeData v2~\cite{bridgev2} 真实世界数据上训练的 openvla-7B 模型~\cite{kim24openvla}。这种设计使我们能够同时在仿真数据与真实数据上评估方法。随后，我们将生成的对抗补丁迁移到在不同任务套件上训练的受害模型（即，OpenVLA 的各个 LIBERO 变体）上进行评估，以严格验证方法的鲁棒性与有效性。这些模型基于不同数据源和任务目标进行训练。
+
+\textbf{机器人设置（真实世界场景）。} 
+在真实世界任务中，我们采用一套由 \textit{Universal Robots UR10e} 与 \textit{Robotiq Hand-E Gripper} 组成的机器人系统，以提供 7DoF 运动能力。感知系统包括一个固定肩视角的 RGB 摄像头。
+
+\textbf{评估细节。}
+为了评估方法的有效性与鲁棒性，我们在 LIBERO 数据集~\cite{LIBREO}上进行实验。每个任务套件包含 10 个任务，每个任务执行 50 次试验，总计 500 次 rollout，遵循~\citet{kim24openvla} 的设置。为保证可复现性，我们为每个任务套件仔细选择补丁粘贴位置，确保其不会遮挡测试环境中的目标物体或机器人本体。
+
+\textbf{评估指标。} 在任务执行评估中，我们将 LIBERO 训练数据集中各任务套件的最大步数作为超时失败条件，以降低计算开销。此外，在 LIBERO~\cite{LIBREO} 提出的成功率（Success Rate, SR）基础上，我们采用失败率（Failure Rate, FR），即 $1-\text{SR}$，作为主要评估指标。为了进一步量化动作偏差，我们对相应自由度上的非目标攻击采用 NAD（见式~\ref{formula:AD}），因为它通过相对距离来刻画与最优动作之间的偏移程度。更高的 NAD 值意味着真实动作与预测动作之间存在更大的偏差。此外，我们还报告每个任务套件内各任务 FR 的标准差。
+
+\begin{table}[t]
+    \caption{\textbf{目标操控攻击结果。} 我们报告 LIBERO~\cite{LIBREO} 任务套件中的失败率（FR,~$\uparrow$）及其在各任务间的标准差。任务套件表现和自由度表现分别进行平均，并分别标出 \textbf{最佳} 和 \underline{次优} 数值。}
+    \vspace{-0.7em}
+    \begin{adjustbox}{width=0.70\width,center}
+    \begin{tabular}{c|c|cccccccccc}
+    \toprule
+    \rowcolor{mygray}
+                             &                     & \multicolumn{5}{c|}{\textbf{仿真}~(\textit{Attacked on OpenVLA-LIBERO-10})}                                                                                                           & \multicolumn{5}{c}{\textbf{物理}~(\textit{Attacked on OpenVLA-7b})}                                                                                                             \\
+\rowcolor{mygray}
+\multirow{-2}{*}{\textbf{目标 DoF}}          & \multirow{-2}{*}{\textbf{指标}} & \textbf{Spatial$^\triangle$} & \textbf{Object$^\triangle$} & \textbf{Goal$^\triangle$} & \textbf{Long$^*$} & \multicolumn{1}{c|}{\textbf{平均}} & \textbf{Spatial$^\triangle$} & \textbf{Object$^\triangle$} & \textbf{Goal$^\triangle$} & \textbf{Long$^\triangle$} & \textbf{平均} \\
+\midrule
+\midrule
+\multicolumn{1}{c|}{良性}               & \multirow{2}{*}{FR}                 & 15.3$\pm$10.2\%                           & 11.6$\pm$10.0\%                           & 20.8$\pm$12.0\%                         & 46.3$\pm$18.6\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}23.5\%}    & 15.3$\pm$10.2\%                            & 11.6$\pm$10.0\%                           & 20.8$\pm$12.0\%                         & 46.3$\pm$18.6\%                         & \cellcolor{mygray} 23.5\%                        \\
+\multicolumn{1}{c|}{随机噪声}         &                                     & 28.8$\pm$24.2\%                           & 14.8$\pm$7.9\%                            & 21.0$\pm$15.5\%                         & 48.4$\pm$14.8\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}28.3\%}    & 28.8$\pm$24.2\%                            & 14.8$\pm$7.9\%                            & 21.0$\pm$15.5\%                         & 48.4$\pm$14.8\%                         & \cellcolor{mygray} 28.3\%                        \\
+\midrule
+\multicolumn{1}{c|}{DoF$_1$}              & \multirow{9}{*}{FR}                 & 100$\pm$0.0\%                           & 97.8$\pm$3.0\%                           & 100$\pm$0.0\%                         & 100$\pm$0.0\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}99.5\%}                & 90.6$\pm$19.9\%                            & 36.6$\pm$18.1\%                            & 61.0$\pm$21.7\%                         & 86.4$\pm$12.7\%                         & \cellcolor{mygray} 68.7\%                        \\
+\multicolumn{1}{c|}{DoF$_2$}              &                                     & 100$\pm$0.0\%                           & 99.2$\pm$1.3\%                           & 100$\pm$0.0\%                         & 100$\pm$0.0\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}\underline{99.8\%}}    & 99.6$\pm$0.8\%                             & 69.2$\pm$11.1\%                            & 76.2$\pm$26.1\%                         & 91.8$\pm$9.9\%                          & \cellcolor{mygray} 84.2\%                        \\
+\multicolumn{1}{c|}{DoF$_3$}              &                                     & 100$\pm$0.0\%                           & 97.2$\pm$6.0\%                           & 100$\pm$0.0\%                         & 100$\pm$0.0\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}99.3\%}                & 72.0$\pm$14.8\%                            & 30.2$\pm$17.4\%                            & 39.2$\pm$20.9\%                         & 62.4$\pm$17.5\%                         & \cellcolor{mygray} 51.0\%                        \\
+\multicolumn{1}{c|}{DoF$_4$}              &                                     & 94.0$\pm$11.0\%                         & 37.4$\pm$23.2\%                          & 51.2$\pm$26.5\%                       & 87.6$\pm$14.9\%                       & \multicolumn{1}{c|}{\cellcolor{mygray}67.6\%}                & 93.6$\pm$9.7\%                             & 31.8$\pm$20.3\%                            & 45.0$\pm$18.3\%                         & 63.8$\pm$17.0\%                         & \cellcolor{mygray} 58.6\%                        \\
+\multicolumn{1}{c|}{DoF$_5$}              &                                     & 100$\pm$0.0\%                           & 92.6$\pm$8.4\%                           & 100$\pm$0.0\%                         & 100$\pm$0.0\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}98.2\%}                & 97.8$\pm$4.9\%                             & 36.0$\pm$22.5\%                            & 62.0$\pm$24.8\%                         & 79.4$\pm$21.3\%                         & \cellcolor{mygray} 68.8\%                        \\
+\multicolumn{1}{c|}{DoF$_6$}              &                                     & 100$\pm$0.0\%                           & 80.0$\pm$9.5\%                           & 92.6$\pm$13.4\%                       & 100$\pm$0.0\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}93.2\%}                & 79.0$\pm$14.2\%                            & 22.2$\pm$14.4\%                            & 41.0$\pm$21.5\%                         & 62.6$\pm$15.7\%                         & \cellcolor{mygray} 51.2\%                        \\
+\multicolumn{1}{c|}{DoF$_7$}              &                                     & 99.2$\pm$1.3\%                          & 86.6$\pm$8.3\%                           & 67.2$\pm$22.5\%                       & 96.4$\pm$6.4\%                        & \multicolumn{1}{c|}{\cellcolor{mygray}87.4\%}                & 91.8$\pm$15.3\%                            & 98.8$\pm$1.3\%                             & 70.6$\pm$23.4\%                         & 93.2$\pm$10.2\%                         & \cellcolor{mygray} \textbf{88.6\%}                        \\
+\multicolumn{1}{c|}{\quad DoF$_{1\sim3}$} &                                     & 100$\pm$0.0\%                           & 100$\pm$0.0\%                           & 100$\pm$0.0\%                         & 100$\pm$0.0\%                         & \multicolumn{1}{c|}{\cellcolor{mygray}\textbf{100\%}}        & 96.4$\pm$8.0\%                             & 83.6$\pm$16.8\%                            & 74.4$\pm$26.3\%                         & 91.8$\pm$11.9\%                         & \cellcolor{mygray} \underline{86.6\%}                        \\
+\midrule
+\multicolumn{2}{c|}{任务平均}                                                    & \cellcolor{mygray} \textbf{99.2\%}                 & \cellcolor{mygray} 86.4\%                 & \cellcolor{mygray} 88.9\%               & \cellcolor{mygray} \underline{98.0\%}               & \multicolumn{1}{c|}{-}         & \cellcolor{mygray} \textbf{90.1\%}                  & \cellcolor{mygray} 51.1\%                 & \cellcolor{mygray} 58.7\%               & \cellcolor{mygray} \underline{78.9\%}               & -                                                \\
+\bottomrule
+    \end{tabular}
+    \label{tab:main-result-NTA}
+    \end{adjustbox}
+    \vspace{-15pt}
+\end{table}
+
+\section{主要结果}\label{subsec:main_results}
+\textbf{定量结果。} 
+对于 UADA 和 UPA，我们的方法能够有效放大动作差异，从而在提升失败率方面表现出显著的迁移攻击能力（见表~\ref{table:simulation-results}）。
+具体而言，在\textbf{仿真}设置下攻击 DoF$_1$ 和 DoF$_{1\sim3}$ 时，UADA 和 UPA 分别取得了 21.0\% 和 14.5\% 的 NAD，相较 UMA 场景分别提升了 6.9\% 和 3.1\%。UADA 与 UPA 都能有效扰乱机器人执行，其平均失败率最高分别达到 100\% 和 89.7\%。
+在\textbf{物理}设置中（见表~\ref{table:physical-results}），我们的攻击方法同样展现出很强的可迁移性，因为在真实物理设置下生成的对抗补丁会显著影响 LIBERO-X 测试表现。具体来说，UADA 和 UPA 都能生成动作偏差很大的恶意动作，对应差异分别为 32.6\%（DoF$_1$）与 26.9\%（DoF$_{1\sim3}$）；相比 UMA 场景中的 26.7\%（DoF$_1$）和 23.8\%（DoF$_{1\sim3}$），分别提升了 5.9\% 和 3.1\%。\textbf{比较两种设置}（表~\ref{table:simulation-results} $v.s.$ 表~\ref{table:physical-results}）可见，NAD 存在整体差异（例如 UADA 为 32.6\% $v.s.$ 21.0\%）。这一差异可归因于用于实施攻击的仿真数据集与真实世界数据集之间的根本差别（Bridge V2~\cite{bridgev2} $v.s.$ LIBERO~\cite{LIBREO}）。真实世界数据在环境复杂度、对象多样性和任务难度上的更高变化性，使机器人在验证数据集中更容易产生更大的动作差异。
+
+对于 TMA 任务，我们通过将所有目标自由度操控为 0（即，式~\ref{eq_tma} 中 $y^{i}_T=0$）来评估方法有效性。实验表明，我们的方法在操控机器人轨迹并提高 FR 方面非常有效（见表~\ref{tab:main-result-NTA}）。具体而言，在不同生成设置下，该方法在多个任务中都带来了显著提升，例如在\textbf{仿真}场景中，平均失败率最高可达 100\%，而良性表现仅为 23.5\%；在\textbf{物理}场景中，该值达到 88.6\%。
+此外，在攻击 DoF$_4$ 时，我们观察到较低的 FR 但较高的任务偏移。这可能是因为 DoF$_4$ 控制沿 x 轴的姿态方向，而这一自由度在某些任务中可能是冗余的。因此，针对\textit{冗余自由度}~\cite{kurdila2019dynamics}的攻击不太容易有效破坏执行过程。这一现象表明，在为机器人系统设计对抗攻击时，必须考虑具体任务特性。
+
+\textbf{定性结果。} 
+我们在图~\ref{fig:qualitative} 中对三种所提攻击下的机器人运动轨迹进行了定性分析。
+对于 \textbf{UADA}，我们比较了同一试验中由 UADA 与 UMA 生成补丁所导致的轨迹偏差。可以看到，UMA 仅引起较小的轨迹偏移；相比之下，UADA 产生了显著更大的轨迹偏离（这一点也由表~\ref{table:physical-results} 中的 NAD 指标支持），这得益于 UADA 对动作差异的显式建模。根据我们的观察，UADA 会显著放大对整体任务执行的影响，从而增加机器人带来危险的可能性。
+对于 \textbf{UPA}，我们观察到混乱且不规则的行为，包括末端执行器移出摄像头视野的情况。我们将这一现象归因于对抗补丁有效扰动了模型的空间感知，使其持续偏离预期运动方向，最终在长时程执行中导致失败。
+对于 \textbf{TMA}，我们观察到沿目标攻击轴对应的 x 轴方向运动范围明显缩小。这说明我们提出的目标攻击能够有效约束机器人运动。
+
+总的来说，定性分析表明，本文的非目标攻击 UADA、UPA 与目标攻击 TMA 都能够有效扰乱 VLA 模型生成的机器人动作。
+这些发现凸显了通用机器人部署过程中的\textit{紧迫安全隐患}，尤其是在那些要求高可靠运行的应用场景中更是如此 \cite{cheng2011reliability,Vogel2013safezone}。
+
+\begin{figure}[htbp]
+\centering
+    \includegraphics[width=0.88\linewidth]{images/physcialworld.pdf}
+    \vspace{-10pt}
+    \caption{\textbf{物理世界中的定性结果}。第一行/第二行分别展示了 \textcolor[HTML]{00B050}{良性} 与 \textcolor[HTML]{C00000}{对抗} 情况。}
+    \label{fig:physcial}
+    \vspace{-1.2em}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{images/defense.pdf}
+    \vspace{-18pt}
+    \caption{\textbf{内循环、补丁尺寸的影响与防御讨论}。图中展示了不同内循环步数对 UADA 中 NAD 的影响，以及不同补丁尺寸对以 DoF$_1$ 为攻击目标时 TMA 的 $L1$ 距离和失败率的影响。(a) 内循环的影响，(b) 补丁尺寸的影响，(c-f) 四种不同防御方法对失败率的影响。}
+    \label{fig:patchsize}
+    \vspace{-18pt}
+\end{figure}
+
+\textbf{真实世界表现。} 
+除数字仿真结果外，我们还对所生成对抗补丁在真实世界场景中的表现进行了全面评估。评估包含三类不同任务上的 100 次试验：物体抓取、放置与操控。如图~\ref{fig:physcial} 所示，采用 UADA 生成的对抗补丁能够有效操纵机器人，攻击成功率超过 \textbf{43\%}。尽管这一成功率低于对应的数字世界表现（即，\textbf{100\%}），但它仍然表明本文补丁在物理世界应用中同样具有有效性，而且无需进一步适配。
+更重要的是，我们观察到，在成功攻击中机器人出现的异常运动（与仿真场景相似）会对人类安全及周围环境带来显著风险。这一结果强调了 VLA 模型在真实世界应用中的严重威胁，与数字场景中的类似观察结论保持一致。
+
+\section{诊断实验}\label{sec:diag}
+
+\textbf{内循环的影响。} 
+我们在图~\ref{fig:patchsize}(a) 中讨论内循环步数对模型表现的影响。结果表明，随着内循环步数增加，NAD 起初会提升。这是因为数据方差降低、梯度逐渐稳定。然而，当步数继续增大时，性能提升会放缓，同时训练时间显著增加。因此，我们选择内循环步数为 50，以在性能与规模之间取得平衡。 \\
+\textbf{补丁尺寸的影响。} 
+我们研究了不同补丁尺寸下 TMA 的表现，并在图~\ref{fig:patchsize}(b) 中报告了四个 LIBERO~\cite{LIBREO} 任务上的平均 FR。所考察的补丁尺寸为输入图像的 $[3\%, 5\%, 7\%, 10\%]$。
+我们的发现表明，随着补丁尺寸增大，预测动作与目标动作之间的 $L_1$ 距离呈反比变化；同时，FR 也随之明显上升。这一趋势说明更大的补丁为攻击者提供了更大的优化空间去影响模型，与先前工作~\cite{cheng2024self,Zhang2022patchsize}的结论一致。
+
+\section{鲁棒性评估} \label{sec:defense}
+
+我们进一步考察现有防御策略~\cite{Gintare2016jpeg,Zhang2019noise,Xu2018medianblur}是否能够抵御 VLA 场景下的对抗样本。具体而言，我们应用了四种既有防御技术，并分别在图~\ref{fig:patchsize}(c-f) 中报告其对良性样本与对抗样本的 FR。结果表明，我们的对抗攻击能够绕过大多数防御策略。
+
+\section{系统性讨论} \label{sec:sysdis}
+\begin{figure}[t]
+    \centering
+    \begin{subfigure}{0.23\textwidth}
+        \includegraphics[width=\linewidth]{images/patchvis1.pdf}
+        \caption{BridgeData V2~\cite{bridgev2}}
+        \label{fig:vis1}
+    \end{subfigure}
+    \begin{subfigure}{0.23\textwidth}
+        \includegraphics[width=\linewidth]{images/patchvis2.pdf}
+        \caption{LIBERO~\cite{LIBREO}}
+        \label{fig:vis2}
+    \end{subfigure}
+    \vspace{-8pt}
+    \caption{\textbf{补丁可视化}。富含语义信息的补丁。}
+    \label{fig:defensediscussion}
+    \vspace{-1.5em}
+\end{figure}
+\textbf{补丁模式分析。} 
+在图~\ref{fig:defensediscussion} 中，我们展示了针对一系列目标生成的对抗补丁。一个特别值得注意的现象是，其中一些补丁与机械臂的结构关节表现出惊人的相似性。鉴于这些补丁在外观上与机械臂高度相似，我们推测，当前训练范式下的基于 VLA 的模型往往只接触到有限范围的机器人系统，并且这些系统运行在受限的摄像头视角中。这种受限的透视摄像机位姿可能会无意中诱导一种表征偏置，使得对抗扰动在欺骗当前受害模型时，会与训练机器人外观中的显著结构特征相对齐。
+考虑到这些补丁具有模型特异性，并反映了训练环境中的空间和视觉模式，我们有充分理由担忧，它们可能会削弱基于 VLA 模型在物理世界部署中的泛化能力与鲁棒性。 \\
+\textbf{可能的防御策略。}
+本文工作表明，为了成功抵御我们的攻击，基于 VLA 模型的训练策略亟需发生范式转变。具体而言，未来方法可以引入更多涉及复杂多机器人交互的训练场景，以缓解当前补丁偏置。另一种可能的解决方案是利用机械臂物理结构中的逻辑关系来估计各关节的真实位置。通过识别那些偏离物理约束的关节位置预测，我们可以剔除不合理的对抗样本，即便这些样本在外观上与真实关节相似。
