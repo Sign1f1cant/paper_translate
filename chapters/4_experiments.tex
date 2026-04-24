@@ -46,7 +46,7 @@
 
 \textbf{随机噪声基线。} 我们还生成随机噪声补丁作为额外基线，用以表示一种不具有任何学习式对抗意图的非结构化干预。具体而言，噪声从高斯分布 $\mathcal{N}(0, 1)$ 中采样，并在与本文攻击方法相同的设置下进行评估。
 
-\begin{table}[p]
+\begin{table}[htbp]
 \centering
 \small
 \caption{\textbf{非目标攻击结果。} 我们在 LIBERO 仿真环境中报告 FR 和 NAD。$^*$ 表示与补丁生成模型和数据集一致的同域受害模型与数据集，$^\triangle$ 表示涉及不同受害模型和数据集的迁移攻击评估（见 \S\ref{sec:experiment_setup}）。每个任务套件中的 FR~($\uparrow$) 以 \textbf{最佳} 和 \underline{次优} 进行标注。}
@@ -137,7 +137,7 @@ UPA                          & ~~~~DoF$_{1\sim3}$      & 26.9                  &
 
 \textbf{评估指标。} 在任务执行评估中，我们将 LIBERO 训练数据集中各任务套件的最大步数作为超时失败条件，以降低计算开销。此外，在 LIBERO~\cite{LIBREO} 提出的成功率（Success Rate, SR）基础上，我们采用失败率（Failure Rate, FR），即 $1-\text{SR}$，作为主要评估指标。为了进一步量化动作偏差，我们对相应自由度上的非目标攻击采用 NAD（见式~\ref{formula:AD}），因为它通过相对距离来刻画与最优动作之间的偏移程度。更高的 NAD 值意味着真实动作与预测动作之间存在更大的偏差。此外，我们还报告每个任务套件内各任务 FR 的标准差。
 
-\begin{table}[p]
+\begin{table}[htbp]
     \centering
     \small
     \caption{\textbf{目标操控攻击结果。} 我们报告 LIBERO~\cite{LIBREO} 任务套件中的失败率（FR,~$\uparrow$）及其在各任务间的标准差。任务套件表现和自由度表现分别进行平均，并分别标出 \textbf{最佳} 和 \underline{次优} 数值。}
