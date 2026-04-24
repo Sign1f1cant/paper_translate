@@ -1,4 +1,4 @@
-\chapter{实验}
+\section{实验}
 
 \label{sec:exp}
 本节首先在 \S\ref{Attack_Pipeline} 中介绍我们的对抗框架与基线方法的实现细节。随后，在 \S\ref{sec:experiment_setup} 中说明实验设置，并在模拟与物理世界场景下报告定量和定性结果（\S\ref{subsec:main_results}）。之后，我们在 \S\ref{sec:diag} 中进行诊断实验，以分析关键组件的影响；在 \S\ref{sec:defense} 中评估方法面对不同防御机制时的鲁棒性；最后在 \S\ref{sec:sysdis} 中给出系统层面的综合讨论。
@@ -18,7 +18,7 @@
 \end{algorithmic}
 \label{algorithm:1}
 \end{algorithm}
-\section{实现细节} \label{Attack_Pipeline}
+\subsection{实现细节} \label{Attack_Pipeline}
 我们的对抗补丁攻击流程实现如算法~\ref{algorithm:1} 所示。为提高生成补丁的训练稳定性，我们引入了两项关键修改。 \\
 \textbf{内循环。} 参考先前工作~\cite{Madry2018twords}，我们在第 \ref{alg:innerloop} 行所示的每次迭代中加入 $k$ 个内循环优化步骤，以减少数据方差并确保更新更加一致。 \\
 \textbf{几何变换。} 为了提升攻击在真实场景中的鲁棒性，我们在第 \ref{alg:eot} 行采用随机几何变换 $\mathcal{T}\big[(\cdot),(sh_x,sh_y,\theta)\big]$，结合仿射变换与旋转变换~\cite{AthalyeEOT2018}，定义为：
@@ -119,7 +119,7 @@ UPA                          & ~~~~DoF$_{1\sim3}$      & 26.9                  &
 					\end{subtable}
 \end{table}
 
-\section{实验设置}\label{sec:experiment_setup}
+\subsection{实验设置}\label{sec:experiment_setup}
 \textbf{数据集。} 
 我们在 BridgeData V2~\cite{bridgev2} 与 LIBERO~\cite{LIBREO} 上，结合相应的 VLA 模型开展攻击。BridgeData V2~\cite{bridgev2} 是一个真实世界数据集，包含 $24$ 个多样环境和 $13$ 种不同技能，例如抓取、放置和物体重排，总计 $60,096$ 条轨迹。LIBERO~\cite{LIBREO} 是一个仿真数据集，旨在评估模型在四类不同任务上的表现（Spatial、Object、Goal、Long）。其中，LIBERO-Long 融合了多样对象、布局和长时程任务，因此对复杂多步规划更具挑战性，所以我们选择 LIBERO-Long 来执行 UADA、UPA 和 TMA。
 
@@ -167,7 +167,7 @@ UPA                          & ~~~~DoF$_{1\sim3}$      & 26.9                  &
     \vspace{-15pt}
 \end{table}
 
-\section{主要结果}\label{subsec:main_results}
+\subsection{主要结果}\label{subsec:main_results}
 \textbf{定量结果。} 
 对于 UADA 和 UPA，我们的方法能够有效放大动作差异，从而在提升失败率方面表现出显著的迁移攻击能力（见表~\ref{table:simulation-results}）。
 具体而言，在\textbf{仿真}设置下攻击 DoF$_1$ 和 DoF$_{1\sim3}$ 时，UADA 和 UPA 分别取得了 21.0\% 和 14.5\% 的 NAD，相较 UMA 场景分别提升了 6.9\% 和 3.1\%。UADA 与 UPA 都能有效扰乱机器人执行，其平均失败率最高分别达到 100\% 和 89.7\%。
@@ -207,7 +207,7 @@ UPA                          & ~~~~DoF$_{1\sim3}$      & 26.9                  &
 除数字仿真结果外，我们还对所生成对抗补丁在真实世界场景中的表现进行了全面评估。评估包含三类不同任务上的 100 次试验：物体抓取、放置与操控。如图~\ref{fig:physcial} 所示，采用 UADA 生成的对抗补丁能够有效操纵机器人，攻击成功率超过 \textbf{43\%}。尽管这一成功率低于对应的数字世界表现（即，\textbf{100\%}），但它仍然表明本文补丁在物理世界应用中同样具有有效性，而且无需进一步适配。
 更重要的是，我们观察到，在成功攻击中机器人出现的异常运动（与仿真场景相似）会对人类安全及周围环境带来显著风险。这一结果强调了 VLA 模型在真实世界应用中的严重威胁，与数字场景中的类似观察结论保持一致。
 
-\section{诊断实验}\label{sec:diag}
+\subsection{诊断实验}\label{sec:diag}
 
 \textbf{内循环的影响。} 
 我们在图~\ref{fig:patchsize}(a) 中讨论内循环步数对模型表现的影响。结果表明，随着内循环步数增加，NAD 起初会提升。这是因为数据方差降低、梯度逐渐稳定。然而，当步数继续增大时，性能提升会放缓，同时训练时间显著增加。因此，我们选择内循环步数为 50，以在性能与规模之间取得平衡。 \\
@@ -215,11 +215,11 @@ UPA                          & ~~~~DoF$_{1\sim3}$      & 26.9                  &
 我们研究了不同补丁尺寸下 TMA 的表现，并在图~\ref{fig:patchsize}(b) 中报告了四个 LIBERO~\cite{LIBREO} 任务上的平均 FR。所考察的补丁尺寸为输入图像的 $[3\%, 5\%, 7\%, 10\%]$。
 我们的发现表明，随着补丁尺寸增大，预测动作与目标动作之间的 $L_1$ 距离呈反比变化；同时，FR 也随之明显上升。这一趋势说明更大的补丁为攻击者提供了更大的优化空间去影响模型，与先前工作~\cite{cheng2024self,Zhang2022patchsize}的结论一致。
 
-\section{鲁棒性评估} \label{sec:defense}
+\subsection{鲁棒性评估} \label{sec:defense}
 
 我们进一步考察现有防御策略~\cite{Gintare2016jpeg,Zhang2019noise,Xu2018medianblur}是否能够抵御 VLA 场景下的对抗样本。具体而言，我们应用了四种既有防御技术，并分别在图~\ref{fig:patchsize}(c-f) 中报告其对良性样本与对抗样本的 FR。结果表明，我们的对抗攻击能够绕过大多数防御策略。
 
-\section{系统性讨论} \label{sec:sysdis}
+\subsection{系统性讨论} \label{sec:sysdis}
 \begin{figure}[t]
     \centering
     \begin{subfigure}{0.23\textwidth}
