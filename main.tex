@@ -43,6 +43,7 @@
 \usepackage{adjustbox}
 \usepackage{booktabs}
 \usepackage{colortbl}
+\usepackage{contour}
 \usepackage{graphicx}
 \usepackage{multirow}
 \usepackage[ruled]{algorithm}
@@ -53,15 +54,17 @@
 \usepackage{xcolor}
 \definecolor{mygray}{gray}{.9}
 \definecolor{bitwatermarkpink}{HTML}{FFC0CB}
+\definecolor{bitwatermarkoutline}{HTML}{FF8FA8}
+\contourlength{0.8pt}
 
 \AddToHook{shipout/background}{%
   \begin{tikzpicture}[remember picture, overlay]
     \node[
-      rotate=-40,
+      rotate=40,
       opacity=0.28,
       text=bitwatermarkpink,
-      font=\bfseries\fontsize{36pt}{36pt}\selectfont
-    ] at (current page.center) {北京理工大学};
+      font=\songti\bfseries\fontsize{54pt}{54pt}\selectfont
+    ] at (current page.center) {\contour{bitwatermarkoutline}{北京理工大学}};
   \end{tikzpicture}%
 }
 
