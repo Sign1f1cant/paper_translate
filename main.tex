@@ -49,21 +49,8 @@
 \usepackage{algorithmic}
 \usepackage{pifont}
 \usepackage{subcaption}
-\usepackage{tikz}
 \usepackage{xcolor}
 \definecolor{mygray}{gray}{.9}
-\definecolor{bitwatermarkpink}{HTML}{FFC0CB}
-
-\AddToHook{shipout/background}{%
-  \begin{tikzpicture}[remember picture, overlay]
-    \node[
-      rotate=-40,
-      opacity=0.28,
-      text=bitwatermarkpink,
-      font=\bfseries\fontsize{36pt}{36pt}\selectfont
-    ] at (current page.center) {北京理工大学};
-  \end{tikzpicture}%
-}
 
 \usepackage[
   backend=biber,
